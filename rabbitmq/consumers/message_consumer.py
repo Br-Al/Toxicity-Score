@@ -2,8 +2,13 @@ import pika.exceptions
 from rabbitmq.connection import RabbitMQConnection
 from pika import BasicProperties
 from config import settings
-import logging
 import time
+import json
+from models import Comment
+from utils import CommentService, simulate_scoring
+from configure_logging import get_logger
+
+logging = get_logger(__name__)
 
 
 class BasicMessageConsumer(RabbitMQConnection):
@@ -38,20 +43,24 @@ class BasicMessageConsumer(RabbitMQConnection):
                 continue
 
     def on_message(self, ch, method, properties: BasicProperties, body):
-        logging.info(f"Received message: {body}")
-        # Process the message here
-        ch.basic_ack(delivery_tag=method.delivery_tag)
-
-
-    def get_message(self, queue):
-        self.ensure_connection()
-        method_frame, header_frame, body = self.channel.basic_get(queue=queue, auto_ack=False)
-        if method_frame:
-            logging.info(f"Retrieved message: {body}")
-            self.channel.basic_ack(delivery_tag=method_frame.delivery_tag)
-            return body
-        else:
-            logging.info("No message available in the queue.")
-            return None
-
+        logging.info(f"Received message", body=body, properties=properties, routing_key=method.routing_key)
+        # Convert body to json
+        try:
+            message = json.loads(body)
+            comment_service = CommentService()
+            # Process the message (placeholder for actual processing logic)
+            logging.info(f"Processing message: {message}")
+            ops = message.get("type", "create").lower()
+            comment = Comment(**message)
+            score = simulate_scoring().get('score')
+            comment_service.process_ops(comment, ops, score)
+            # Acknowledge the message after successful processing
+            ch.basic_ack(delivery_tag=method.delivery_tag)
+            logging.info("Message acknowledged.")
+        except json.JSONDecodeError:
+            logging.error("Failed to decode message body as JSON.", exc_info=True)
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+        except Exception as e:
+            logging.error("Failed to process message.", exc_info=True)
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
 

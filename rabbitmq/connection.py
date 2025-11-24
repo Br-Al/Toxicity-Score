@@ -1,12 +1,16 @@
 import pika
-import logging
+from config import settings
+from configure_logging import get_logger
 
+logging = get_logger(__name__)
 
 class RabbitMQConnection:
 
     def __init__(self):
-        pika_url = f"amqp://{self.username}:{self.password}@{self.host}:{self.port}/{self.vhost}"
+        pika_url = f"amqp://{settings.RABBITMQ_USERNAME}:{settings.RABBITMQ_PASSWORD}@{settings.RABBITMQ_HOST}:{settings.RABBITMQ_PORT}"
         self.parameters = pika.URLParameters(pika_url)
+        self.parameters.heartbeat = settings.RABBITMQ_HEARTBEAT
+        self.parameters.blocked_connection_timeout = settings.RABBITMQ_BLOCKED_CONNECTION_TIMEOUT
         self.connection = None
         self.channel = None
         self._connect()

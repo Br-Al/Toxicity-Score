@@ -1,6 +1,5 @@
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
-import logging
 
 
 class Settings(BaseSettings):
@@ -20,17 +19,22 @@ class Settings(BaseSettings):
     RABBITMQ_CONSUMER_EXCHANGE: str = ""
     RABBITMQ_CONSUMER_ROUTING_KEY: str = ""
     RABBITMQ_CONSUMER_EXCHANGE_TYPE: str = ""
-    # RabbitMQ Producer for outgoing messages
-    RABBITMQ_PRODUCER_EXCHANGE: str = ""
-    RABBITMQ_PRODUCER_EXCHANGE_TYPE: str = ""
-    RABBITMQ_PRODUCER_ROUTING_KEY: str = ""
-    RABBITMQ_PRODUCER_QUEUE: str = ""
+    RABBITMQ_START_CONSUMING: bool = False
+    # RabbitMQ PUBLISHER for outgoing messages
+    RABBITMQ_PUBLISHER_EXCHANGE: str = ""
+    RABBITMQ_PUBLISHER_EXCHANGE_TYPE: str = ""
+    RABBITMQ_PUBLISHER_ROUTING_KEY: str = ""
+    RABBITMQ_PUBLISHER_QUEUE: str = ""
+    PUBLISH_SAMPLE_MESSAGES: bool = False
 
     LOG_LEVEL: str = "INFO"
     LOGGING_PATH: str = "./logs"
     LOGGING_FILE: str = "app.log"
     # MONGODB Settings
-    MONGODB_URI: str = ""
+    MONGODB_USER: str = ""
+    MONGODB_PASSWORD: str = ""
+    MONGODB_DB_NAME: str = "toxicity_score"
+    MONGODB_HOST: str = "localhost"
 
     class Config:
         env_file = ".env"
