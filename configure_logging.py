@@ -1,40 +1,12 @@
 import os.path
 import logging
 import logging.config
-import uuid
-from datetime import datetime
 import structlog
-from config import settings
-from contextlib import asynccontextmanager
 import contextvars
 from typing import Dict, Any, Optional
 
 
-CENSOR_FIELDS = [
-    "password",
-    "username",
-    "ipAddress",
-    "Authorization",
-    "API_KEY",
-    "X-API-KEY"
-]
-
-LARGE_FIELDS = [
-    "document",
-    "file_content",
-    "file",
-    "base64_content"
-]
-
 execution_context: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar("execution_context", default={})
-
-class CensoringFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        for field in CENSOR_FIELDS:
-            if field in record.getMessage():
-                record.msg = record.getMessage().replace(record.args.get(field, ""), "****")
-        return True
-
 
 def inject_context(logger, method_name, event_dict):
     context = execution_context.get()
@@ -43,25 +15,24 @@ def inject_context(logger, method_name, event_dict):
 
     return event_dict
 
-
-def configure_logging(config_settings):
-
+def configure_logging(config_settings, additional_processors: Optional[list] = None):
     shared_processors = [
-        structlog.stdlib.add_logger_name,
-        structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         inject_context,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+    ]
+    if additional_processors:
+        shared_processors.extend(additional_processors)
+    structlog_only_processors = [
+        structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
-        structlog.processors.UnicodeDecoder(),
+        structlog.stdlib.ProcessorFormatter.wrap_for_formatter
     ]
 
     structlog.configure(
-        processors=[
-            structlog.stdlib.filter_by_level,
-            *shared_processors,
-            structlog.processors.JSONRenderer()
-        ],
+        processors=shared_processors + structlog_only_processors,
         context_class=structlog.threadlocal.wrap_dict(dict),
         logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,
@@ -71,8 +42,7 @@ def configure_logging(config_settings):
     loggers = {
         "": {
             "level": config_settings.LOG_LEVEL if hasattr(config_settings, "LOG_LEVEL") else "INFO",
-            "handlers": ["console", "json_file"],
-            "filters": ["censoring_filter"]
+            "handlers": ["console", "json_file"]
         },
     }
 
@@ -80,16 +50,13 @@ def configure_logging(config_settings):
         {
             "version": 1,
             "disable_existing_loggers": False,
-            "filters": {
-                "censoring_filter": {
-                    "()": CensoringFilter,
-                },
-            },
             "formatters": {
-                "standard": {
+                "plain_console": {
                     "()": structlog.stdlib.ProcessorFormatter,
                     "processor": structlog.dev.ConsoleRenderer(
-                        colors=True
+                        sort_keys=True,
+                        pad_event=40,
+                        colors=True,
                     ),
                     "foreign_pre_chain": shared_processors,
                 },
@@ -102,16 +69,20 @@ def configure_logging(config_settings):
             "handlers": {
                 "console": {
                     "class": "logging.StreamHandler",
-                    "formatter": "standard",
-                    "filters": ["censoring_filter"],
+                    "formatter": "plain_console",
                 },
                 "json_file": {
-                    "class": "logging.FileHandler",
+                    "class": "logging.handlers.WatchedFileHandler",
                     "filename": os.path.join(config_settings.LOGGING_PATH, config_settings.LOGGING_FILE),
                     "formatter": "json",
-                    "filters": ["censoring_filter"],
                 },
             },
             "loggers": loggers,
         }
     )
+
+
+def get_logger(name: Optional[str] = None) -> structlog.stdlib.BoundLogger:
+    logger_name = name if name else __name__
+
+    return structlog.get_logger(logger_name)
