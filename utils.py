@@ -1,9 +1,11 @@
 from configure_logging import get_logger
 import random
 import time
-from models import Comment
+from models import Comment, Message
 from typing import Union
+from config import settings
 from database.connection import MongoDBConnection
+from rabbitmq.publishers.message_publisher import BasicMessagePublisher
 
 
 logging = get_logger(__name__)
@@ -34,6 +36,8 @@ def simulate_scoring(min_duration: int=2, max_duration: int=15) -> dict:
 class CommentService:
     def __init__(self):
         self.db_connection = MongoDBConnection()
+        self.collection = self.db_connection.get_collection("comments")
+        self.collection.create_index("id", unique=True)
 
     def update(self, comment: Comment, score: float) -> Union[Comment, None]:
         """
@@ -44,8 +48,8 @@ class CommentService:
         """
         comment.score = score
         try:
-            result = self.db_connection.db.update_one(
-                {"_id": comment.id},
+            result = self.collection.update_one(
+                {"id": comment.id},
                 {"$set": {"score": score}}
             )
             if result.modified_count == 1:
@@ -54,9 +58,9 @@ class CommentService:
             else:
                 logging.warning(f"Comment {comment.id} score update failed or no change made.")
                 return None
-        except Exception:
+        except Exception as e:
             logging.error(f"Error updating comment {comment.id} score", exc_info=True)
-            return None
+            raise e
 
     def delete(self, comment_id: str) -> bool:
         """
@@ -65,16 +69,16 @@ class CommentService:
         :return: bool indicating success or failure
         """
         try:
-            result = self.db_connection.db.delete_one({"_id": comment_id})
+            result = self.collection.delete_one({"id": comment_id})
             if result.deleted_count == 1:
                 logging.info(f"Comment {comment_id} deleted successfully.")
                 return True
             else:
                 logging.warning(f"Comment {comment_id} deletion failed or not found.")
                 return False
-        except Exception:
+        except Exception as e:
             logging.error(f"Error deleting comment {comment_id}", exc_info=True)
-            return False
+            raise e
 
 
     def add(self, comment: Comment) -> Union[Comment, None]:
@@ -84,7 +88,7 @@ class CommentService:
         :return: Added Comment object with ID
         """
         try:
-            result = self.db_connection.db.insert_one(comment.dict(exclude={"id"}))
+            result = self.collection.insert_one(comment.__dict__)
             comment.id = str(result.inserted_id)
             logging.info(f"Comment added with ID {comment.id}.")
             return comment
@@ -114,3 +118,22 @@ class CommentService:
         else:
             logging.error(f"Invalid operation type: {ops}")
             return None
+
+
+def publish_result(message: Message):
+    """
+    Publish the result message to RabbitMQ.
+    :param message: Message object
+    """
+    try:
+        logging.info(f"Publishing message: {message}")
+        publisher = BasicMessagePublisher()
+        publisher.publish(
+            exchange_name=settings.RABBITMQ_PUBLISHER_EXCHANGE,
+            routing_key=settings.RABBITMQ_PUBLISHER_ROUTING_KEY,
+            body=message.__dict__
+        )
+        publisher.close()
+        logging.info("Message published successfully.")
+    except Exception:
+        logging.error("Error publishing message", exc_info=True)

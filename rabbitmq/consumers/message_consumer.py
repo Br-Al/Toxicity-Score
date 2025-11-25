@@ -4,16 +4,14 @@ from pika import BasicProperties
 from config import settings
 import time
 import json
-from models import Comment
-from utils import CommentService, simulate_scoring
+from models import Comment, Message
+from utils import CommentService, simulate_scoring, publish_result
 from configure_logging import get_logger
 
 logging = get_logger(__name__)
 
 
 class BasicMessageConsumer(RabbitMQConnection):
-
-
 
     def start_consuming(self, queue_name):
 
@@ -42,25 +40,47 @@ class BasicMessageConsumer(RabbitMQConnection):
                 time.sleep(settings.RABBITMQ_PAUSE)
                 continue
 
-    def on_message(self, ch, method, properties: BasicProperties, body):
+    @staticmethod
+    def on_message(ch, method, properties: BasicProperties, body):
         logging.info(f"Received message", body=body, properties=properties, routing_key=method.routing_key)
-        # Convert body to json
+        body = json.loads(body)
+        comment = Comment(
+            id=body.get("id"),
+            content=body.get("text"),
+            user_id=body.get("user_id"),
+            timestamp=body.get("timestamp"),
+            score=body.get("score", 0)
+        )
+        ops = body.get("type", "create").lower()
+        score = simulate_scoring().get('score')
+        message_result = Message(
+            message_id=comment.id,
+            status="processed",
+            type=ops,
+        )
         try:
-            message = json.loads(body)
             comment_service = CommentService()
             # Process the message (placeholder for actual processing logic)
-            logging.info(f"Processing message: {message}")
-            ops = message.get("type", "create").lower()
-            comment = Comment(**message)
-            score = simulate_scoring().get('score')
-            comment_service.process_ops(comment, ops, score)
+            logging.info(f"Processing message", message=body)
+            result = comment_service.process_ops(comment, ops, score)
+            publish_result(message_result)
             # Acknowledge the message after successful processing
-            ch.basic_ack(delivery_tag=method.delivery_tag)
-            logging.info("Message acknowledged.")
+            if result:
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                logging.info("Message acknowledged.")
+                return
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=settings.RABBITMQ_REQUEUE_ON_FAIL)
+            logging.warning("Message processing failed, message not acknowledged.")
         except json.JSONDecodeError:
             logging.error("Failed to decode message body as JSON.", exc_info=True)
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=settings.RABBITMQ_REQUEUE_ON_FAIL)
+            message_result.status = "failed"
+            publish_result(message_result)
         except Exception as e:
             logging.error("Failed to process message.", exc_info=True)
-            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=True)
+            ch.basic_nack(delivery_tag=method.delivery_tag, requeue=settings.RABBITMQ_REQUEUE_ON_FAIL)
+            message_result.status = "failed"
+            publish_result(message_result)
+
+
 

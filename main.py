@@ -2,6 +2,8 @@ from config import settings
 from configure_logging import configure_logging
 import os
 from datetime import datetime
+from random import randint, choice
+import string
 from dotenv import load_dotenv
 from rabbitmq.consumers.message_consumer import BasicMessageConsumer
 from rabbitmq.publishers.message_publisher import BasicMessagePublisher
@@ -45,25 +47,22 @@ def start_rabbitmq_publisher():
         exchange_type=settings.RABBITMQ_PUBLISHER_EXCHANGE_TYPE
      )
      publisher.bind_queue(
-        queue_name=settings.RABBITMQ_PUBLISHER_QUEUE,
+        queue_name=settings.RABBITMQ_CONSUMER_QUEUE,
         exchange_name=settings.RABBITMQ_PUBLISHER_EXCHANGE,
         routing_key=settings.RABBITMQ_PUBLISHER_ROUTING_KEY
      )
+
+     # Publish a number of sample messages
+     sample_messages_count = settings.SAMPLE_MESSAGES_COUNT
+     logging.debug(f"Publishing {sample_messages_count} sample messages to RabbitMQ")
      messages = [
-        {
-            "id": "msg_123456",
-            "user_id": "u_78910",
-            "text": "This is a test message",
-            "timestamp": datetime.utcnow().isoformat(),
-            "type": "update"
-        },
-        {
-            "id": "msg_123457",
-            "user_id": "u_78911",
-            "text": "Another test message",
-            "timestamp": datetime.utcnow().isoformat(),
-            "type": "delete"
-        }
+         {
+                "id": f"msg_{i+1}",
+                "user_id": f"u_{randint(1000, 9999)}",
+                "text": ''.join(choice(string.ascii_letters + string.digits) for _ in range(20)),
+                "timestamp": datetime.utcnow().isoformat(),
+                "type": choice(["create", "update", "delete"])
+         } for i in range(sample_messages_count)
     ]
      for msg in messages:
         routing_key = f"{settings.RABBITMQ_PUBLISHER_ROUTING_KEY}.{msg.get('id')}.{msg.get('type')}"
