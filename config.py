@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     RABBITMQ_BLOCKED_CONNECTION_TIMEOUT: int = 30
     RABBITMQ_PREFETCH_COUNT: int = 1
     RABBITMQ_MAX_RETRIES: int = 5
+    RABBITMQ_PAUSE: int = 5
     # RabbitMQ Consumer for incoming messages
     RABBITMQ_CONSUMER_QUEUE: str = ""
     RABBITMQ_CONSUMER_EXCHANGE: str = ""
@@ -26,15 +27,18 @@ class Settings(BaseSettings):
     RABBITMQ_PUBLISHER_ROUTING_KEY: str = ""
     RABBITMQ_PUBLISHER_QUEUE: str = ""
     PUBLISH_SAMPLE_MESSAGES: bool = False
-
+    SAMPLE_MESSAGES_COUNT: int = 10
+    RABBITMQ_REQUEUE_ON_FAIL: bool = True
     LOG_LEVEL: str = "INFO"
     LOGGING_PATH: str = "./logs"
     LOGGING_FILE: str = "app.log"
     # MONGODB Settings
     MONGODB_USER: str = ""
+    MONGODB_MODE: str = "local"
     MONGODB_PASSWORD: str = ""
     MONGODB_DB_NAME: str = "toxicity_score"
     MONGODB_HOST: str = "localhost"
+    MONGODB_PORT: int = 27017
 
     class Config:
         env_file = ".env"

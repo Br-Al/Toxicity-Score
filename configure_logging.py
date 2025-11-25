@@ -41,9 +41,19 @@ def configure_logging(config_settings, additional_processors: Optional[list] = N
 
     loggers = {
         "": {
-            "level": config_settings.LOG_LEVEL if hasattr(config_settings, "LOG_LEVEL") else "INFO",
+            "level": config_settings.LOG_LEVEL if hasattr(config_settings, "LOG_LEVEL") else "DEBUG",
             "handlers": ["console", "json_file"]
         },
+        "pika": {
+            "level": "WARNING",
+            "handlers": ["console", "json_file"],
+            "propagate": False
+        },
+        "pymongo": {
+            "level": "WARNING",
+            "handlers": ["console", "json_file"],
+            "propagate": False
+        }
     }
 
     logging.config.dictConfig(
@@ -83,6 +93,6 @@ def configure_logging(config_settings, additional_processors: Optional[list] = N
 
 
 def get_logger(name: Optional[str] = None) -> structlog.stdlib.BoundLogger:
-    logger_name = name if name else __name__
 
-    return structlog.get_logger(logger_name)
+
+    return structlog.get_logger(name)
