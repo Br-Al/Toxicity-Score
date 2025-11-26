@@ -1,7 +1,7 @@
 from config import settings
 from configure_logging import configure_logging
 import os
-from datetime import datetime
+from datetime import datetime, UTC
 from random import randint, choice
 import string
 from dotenv import load_dotenv
@@ -10,6 +10,7 @@ from rabbitmq.publishers.message_publisher import BasicMessagePublisher
 import threading
 from multiprocessing import Process, Event
 from configure_logging import get_logger
+from constants import ExchangeType, QueueName
 
 logging = get_logger(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -27,29 +28,29 @@ def start_rabbitmq_consumer():
     # Declare exchange and queue based on settings
     consumer.declare_exchange(
         exchange_name=settings.RABBITMQ_CONSUMER_EXCHANGE,
-        exchange_type=settings.RABBITMQ_CONSUMER_EXCHANGE_TYPE
+        exchange_type=ExchangeType.TOPIC
     )
 
     consumer.bind_queue(
-        queue_name=settings.RABBITMQ_CONSUMER_QUEUE,
+        queue_name=QueueName.INCOMING_TEXTS,
         exchange_name=settings.RABBITMQ_CONSUMER_EXCHANGE,
         routing_key=settings.RABBITMQ_CONSUMER_ROUTING_KEY
     )
 
-    consumer.start_consuming(queue_name=settings.RABBITMQ_CONSUMER_QUEUE)
+    consumer.start_consuming(queue_name=QueueName.INCOMING_TEXTS)
 
     consumer.close()
 
 def start_rabbitmq_publisher():
      publisher = BasicMessagePublisher()
      publisher.declare_exchange(
-        exchange_name=settings.RABBITMQ_PUBLISHER_EXCHANGE,
-        exchange_type=settings.RABBITMQ_PUBLISHER_EXCHANGE_TYPE
+        exchange_name=settings.RABBITMQ_CONSUMER_EXCHANGE,
+        exchange_type=ExchangeType.TOPIC
      )
      publisher.bind_queue(
-        queue_name=settings.RABBITMQ_CONSUMER_QUEUE,
-        exchange_name=settings.RABBITMQ_PUBLISHER_EXCHANGE,
-        routing_key=settings.RABBITMQ_PUBLISHER_ROUTING_KEY
+        queue_name=QueueName.INCOMING_TEXTS,
+        exchange_name=settings.RABBITMQ_CONSUMER_EXCHANGE,
+        routing_key=settings.RABBITMQ_CONSUMER_ROUTING_KEY
      )
 
      # Publish a number of sample messages
@@ -60,14 +61,14 @@ def start_rabbitmq_publisher():
                 "id": f"msg_{i+1}",
                 "user_id": f"u_{randint(1000, 9999)}",
                 "text": ''.join(choice(string.ascii_letters + string.digits) for _ in range(20)),
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "type": choice(["create", "update", "delete"])
          } for i in range(sample_messages_count)
     ]
      for msg in messages:
-        routing_key = f"{settings.RABBITMQ_PUBLISHER_ROUTING_KEY}.{msg.get('id')}.{msg.get('type')}"
+        routing_key = f"{settings.RABBITMQ_CONSUMER_ROUTING_KEY}.{msg.get('id')}.{msg.get('type')}"
         publisher.publish(
-            exchange_name=settings.RABBITMQ_PUBLISHER_EXCHANGE,
+            exchange_name=settings.RABBITMQ_CONSUMER_EXCHANGE,
             routing_key=routing_key,
             body=msg
         )

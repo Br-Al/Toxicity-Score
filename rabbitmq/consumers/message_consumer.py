@@ -5,7 +5,8 @@ from config import settings
 import time
 import json
 from models import Comment, Message
-from utils import CommentService, simulate_scoring, publish_result
+from utils import simulate_scoring, publish_result, to_dict
+from service import CommentService
 from configure_logging import get_logger
 
 logging = get_logger(__name__)
@@ -43,25 +44,26 @@ class BasicMessageConsumer(RabbitMQConnection):
     @staticmethod
     def on_message(ch, method, properties: BasicProperties, body):
         logging.info(f"Received message", body=body, properties=properties, routing_key=method.routing_key)
-        body = json.loads(body)
-        comment = Comment(
-            id=body.get("id"),
-            content=body.get("text"),
-            user_id=body.get("user_id"),
-            timestamp=body.get("timestamp"),
-            score=body.get("score", 0)
-        )
-        ops = body.get("type", "create").lower()
-        score = simulate_scoring().get('score')
-        message_result = Message(
-            message_id=comment.id,
-            status="processed",
-            type=ops,
-        )
+        json_body = to_dict(body)
         try:
+            comment = Comment(
+                id=json_body.get("id"),
+                content=json_body.get("text"),
+                user_id=json_body.get("user_id"),
+                timestamp=json_body.get("timestamp"),
+                score=json_body.get("score", 0)
+            )
+            ops = json_body.get("type", "create").lower()
+            score = simulate_scoring().get('score')
+            message_result = Message(
+                message_id=comment.id,
+                status="processed",
+                type=ops,
+            )
+
             comment_service = CommentService()
             # Process the message (placeholder for actual processing logic)
-            logging.info(f"Processing message", message=body)
+            logging.info(f"Processing message", message=json_body)
             result = comment_service.process_ops(comment, ops, score)
             publish_result(message_result)
             # Acknowledge the message after successful processing
@@ -74,13 +76,15 @@ class BasicMessageConsumer(RabbitMQConnection):
         except json.JSONDecodeError:
             logging.error("Failed to decode message body as JSON.", exc_info=True)
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=settings.RABBITMQ_REQUEUE_ON_FAIL)
-            message_result.status = "failed"
-            publish_result(message_result)
+            # Create a minimal message result for failed JSON
+            try:
+                message_result = Message(message_id="unknown", status="failed", type="unknown")
+                publish_result(message_result)
+            except Exception as publish_error:
+                logging.error("Failed to publish error message for invalid JSON", exc_info=True)
         except Exception as e:
             logging.error("Failed to process message.", exc_info=True)
             ch.basic_nack(delivery_tag=method.delivery_tag, requeue=settings.RABBITMQ_REQUEUE_ON_FAIL)
-            message_result.status = "failed"
-            publish_result(message_result)
 
 
-
+consumer = BasicMessageConsumer()

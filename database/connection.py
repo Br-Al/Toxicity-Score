@@ -17,9 +17,7 @@ class MongoDBConnection:
     def _connect(self):
         try:
             logging.info("Connecting to MongoDB server...")
-            uri = f"mongodb://{settings.MONGODB_USER}:{settings.MONGODB_PASSWORD}@{settings.MONGODB_HOST}:{settings.MONGODB_PORT}/{settings.MONGODB_DB_NAME}?authSource=admin"
-            if settings.MONGODB_MODE == "atlas":
-                uri = self.uri = f"mongodb+srv://{settings.MONGODB_USER}:{settings.MONGODB_PASS}@{settings.MONGODB_HOST}/{self.db_name}?retryWrites=true&w=majority"
+            uri = self.build_uri()
             self.client = MongoClient(uri)
             self.db = self.client[self.db_name]
             logging.info("Connected to MongoDB server successfully.")
@@ -42,3 +40,12 @@ class MongoDBConnection:
             print(f"Error listing collections: {e}")
             return []
 
+
+    def build_uri(self):
+        uri = f"mongodb://{settings.MONGODB_USER}:{settings.MONGODB_PASSWORD}@{settings.MONGODB_HOST}:{settings.MONGODB_PORT}/{settings.MONGODB_DB_NAME}?authSource=admin"
+        if settings.MONGODB_MODE == "atlas":
+            uri = f"mongodb+srv://{settings.MONGODB_USER}:{settings.MONGODB_PASS}@{settings.MONGODB_HOST}/{self.db_name}?retryWrites=true&w=majority"
+
+        return uri
+
+mongo_connection = MongoDBConnection()
