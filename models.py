@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from datetime import datetime
+from datetime import datetime, UTC
 import uuid
 
 
@@ -9,7 +9,7 @@ class Comment(BaseModel):
     content: str = Field(...)
     timestamp: str = Field(...)
     score: float = Field(..., ge=0, le=100)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     deleted_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -19,4 +19,4 @@ class Message(BaseModel):
     type: str = Field(...)
     status: str = Field(...)
     message_id: str = Field(...)
-    processed_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    processed_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())

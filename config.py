@@ -1,5 +1,6 @@
-from pydantic import model_validator
+from pydantic import model_validator, field_validator
 from pydantic_settings import BaseSettings
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -44,6 +45,27 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         extra = "ignore"
+
+    @model_validator(mode='after')
+    def validate_rabbitmq_config(self):
+        """Validate RabbitMQ configuration when consuming or publishing is enabled."""
+        if self.RABBITMQ_START_CONSUMING or self.PUBLISH_SAMPLE_MESSAGES:
+            if not self.RABBITMQ_HOST:
+                raise ValueError("RABBITMQ_HOST is required when RabbitMQ is enabled")
+            if not self.RABBITMQ_USERNAME:
+                raise ValueError("RABBITMQ_USERNAME is required when RabbitMQ is enabled")
+            if not self.RABBITMQ_PASSWORD:
+                raise ValueError("RABBITMQ_PASSWORD is required when RabbitMQ is enabled")
+        return self
+
+    @model_validator(mode='after')
+    def validate_mongodb_config(self):
+        """Validate MongoDB configuration."""
+        if not self.MONGODB_HOST:
+            raise ValueError("MONGODB_HOST is required")
+        if self.MONGODB_MODE == "atlas" and not self.MONGODB_USER:
+            raise ValueError("MONGODB_USER is required for Atlas mode")
+        return self
 
 
 settings = Settings()
